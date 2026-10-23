@@ -2,27 +2,24 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 export interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-  };
+  user?: any;
 }
 
 export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  if (authHeader) {
     const token = authHeader.split(' ')[1];
+    const secret = process.env.JWT_SECRET || 'mi_secreto_super_seguro_strongnest_2026';
 
-    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, decoded: any) => {
+    jwt.verify(token, secret, (err: any, user: any) => {
       if (err) {
         return res.status(403).json({ error: 'Token inválido o expirado' });
       }
-
-      req.user = decoded;
+      req.user = user;
       next();
     });
   } else {
-    return res.status(401).json({ error: 'Acceso no autorizado: Token no proporcionado' });
+    res.status(401).json({ error: 'Acceso denegado. No se proporcionó Token' });
   }
 };
