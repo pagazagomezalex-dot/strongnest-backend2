@@ -9,7 +9,7 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
   const authHeader = req.headers.authorization;
 
   if (authHeader) {
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
     const secret = process.env.JWT_SECRET || 'mi_secreto_super_seguro_strongnest_2026';
 
     jwt.verify(token, secret, (err: any, user: any) => {
