@@ -1,11 +1,7 @@
-import dotenv from 'dotenv';
-import { app } from './app';
+import app from './app';
 
-dotenv.config();
-
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor StrongNest Pets activo en el puerto ${PORT}`);
-  console.log(`🛰️ Health check: http://localhost:${PORT}/health`);
+  console.log(`🚀 Servidor StrongNest escuchando en el puerto ${PORT}`);
 });
