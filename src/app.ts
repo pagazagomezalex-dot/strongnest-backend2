@@ -19,7 +19,7 @@ app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/geofences', geofenceRoutes);
 app.use('/api/alerts', alertRoutes);
 
-// Ruta principal de bienvenida
+// Ruta Raíz (Mensaje de bienvenida)
 app.get('/', (req: Request, res: Response) => {
   res.status(200).send('🐾 Backend de StrongNest activo y listo para la App Móvil 🚀');
 });
@@ -38,7 +38,7 @@ app.get('/health/db', async (req: Request, res: Response) => {
   try {
     const result: any = await db.query('SELECT NOW() AS server_time;');
     const rows = result?.rows || [];
-    const serverTime = rows.length > 0 ? rows.server_time : null;
+    const serverTime = rows.length > 0 ? rows[0].server_time : null;
     res.status(200).json({
       status: 'database_connected',
       serverTime: serverTime
@@ -52,4 +52,5 @@ app.get('/health/db', async (req: Request, res: Response) => {
   }
 });
 
+export default app;
 export { app };
