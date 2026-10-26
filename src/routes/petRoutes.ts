@@ -4,10 +4,10 @@ import authMiddleware from '../middlewares/authMiddleware';
 
 const router = Router();
 
-// 1. Ruta pública para escaneo QR de emergencia (sin token)
+// 1. Ruta pública para escaneo QR de emergencia (sin token JWT)
 router.get('/rescue/:rescue_code', getRescueProfile);
 
-// 2. Rutas privadas (requieren token JWT)
+// 2. Rutas privadas (protegidas con token JWT)
 router.post('/profile', authMiddleware, createOrUpdatePetProfile);
 router.get('/my-pets', authMiddleware, getMyPets);
 
