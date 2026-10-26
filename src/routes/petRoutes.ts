@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { createPet, getMyPets } from '../controllers/petController';
-import { authenticateJWT } from '../middlewares/authMiddleware';
+import { createOrUpdatePetProfile, getMyPets, getRescueProfile } from '../controllers/petController';
+import { authMiddleware } from '../middlewares/authMiddleware';
 
 const router = Router();
 
-router.use(authenticateJWT);
+// 1. Ruta pública para escaneo QR de emergencia (NO requiere token)
+router.get('/rescue/:rescue_code', getRescueProfile);
 
-router.post('/', createPet);
-router.get('/', getMyPets);
+// 2. Rutas privadas protegidas con JWT
+router.post('/profile', authMiddleware, createOrUpdatePetProfile);
+router.get('/my-pets', authMiddleware, getMyPets);
 
 export default router;
