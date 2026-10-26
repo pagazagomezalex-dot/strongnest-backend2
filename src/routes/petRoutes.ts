@@ -1,4 +1,4 @@
-iimport { Router } from 'express';
+import { Router } from 'express';
 import { createOrUpdatePetProfile, getMyPets, getRescueProfile } from '../controllers/petController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 
