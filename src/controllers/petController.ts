@@ -1,48 +1,80 @@
-import { Response } from 'express';
-import { AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { Request, Response } from 'express';
 import { db } from '../config/database';
 
-export const createPet = async (req: AuthenticatedRequest, res: Response) => {
-  const { name, species, breed, device_imei } = req.body;
-  const owner_id = req.user?.userId;
-
-  if (!name) {
-    return res.status(400).json({ error: 'El nombre de la mascota es obligatorio' });
-  }
-
+export const createOrUpdatePetProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await db.query(
-      `INSERT INTO pets (owner_id, name, species, breed, device_imei)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *;`,
-      [owner_id, name, species || 'dog', breed || null, device_imei || null]
-    );
+    const userId = (req as any).user?.userId;
+    const {
+      name, species, breed, birth_date, weight_kg, color_markings,
+      microchip_imei, blood_type, is_support_animal, support_type,
+      allergies, medical_notes, vet_name, vet_phone, vaccination_record
+    } = req.body;
 
-    return res.status(201).json({
-      message: 'Mascota registrada con éxito',
-      pet: result.rows
+    const rescueCode = `RESCUE-${microchip_imei || 'SN-PET-' + Date.now()}`;
+
+    const query = `
+      INSERT INTO pets (
+        user_id, name, species, breed, birth_date, weight_kg, color_markings,
+        microchip_imei, blood_type, is_support_animal, support_type,
+        allergies, medical_notes, vet_name, vet_phone, vaccination_record, rescue_code
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ON CONFLICT (microchip_imei) DO UPDATE SET
+        name = EXCLUDED.name,
+        weight_kg = EXCLUDED.weight_kg,
+        medical_notes = EXCLUDED.medical_notes,
+        vaccination_record = EXCLUDED.vaccination_record,
+        updated_at = NOW()
+      RETURNING *;
+    `;
+
+    const values = [
+      userId, name, species, breed, birth_date, weight_kg, color_markings,
+      microchip_imei, blood_type, is_support_animal, support_type,
+      allergies, medical_notes, vet_name, vet_phone, JSON.stringify(vaccination_record), rescueCode
+    ];
+
+    const result = await db.query(query, values);
+
+    res.status(201).json({
+      message: 'Ficha médica y de rescate registrada exitosamente 🐾',
+      pet: result.rows[0]
     });
   } catch (error: any) {
-    console.error('❌ Error al registrar mascota:', error.message);
-    return res.status(500).json({ error: 'Error interno al registrar mascota', details: error.message });
+    console.error('❌ Error al guardar perfil de mascota:', error.message);
+    res.status(500).json({ error: error.message || 'Error interno al registrar la mascota' });
   }
 };
 
-export const getMyPets = async (req: AuthenticatedRequest, res: Response) => {
-  const owner_id = req.user?.userId;
-
+export const getMyPets = async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = (req as any).user?.userId;
+    const result = await db.query('SELECT * FROM pets WHERE user_id = $1 ORDER BY created_at DESC;', [userId]);
+    res.status(200).json({ pets: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getRescueProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { rescue_code } = req.params;
     const result = await db.query(
-      'SELECT * FROM pets WHERE owner_id = $1 ORDER BY created_at DESC;',
-      [owner_id]
+      `SELECT name, species, breed, color_markings, blood_type, is_support_animal, 
+              support_type, allergies, medical_notes, vet_name, vet_phone, vaccination_record 
+       FROM pets WHERE rescue_code = $1;`,
+      [rescue_code]
     );
 
-    return res.status(200).json({
-      count: result.rows.length,
-      pets: result.rows
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Ficha de rescate no encontrada' });
+      return;
+    }
+
+    res.status(200).json({
+      title: 'FICHA PÚBLICA DE RESCATE - STRONGNEST PETS 🐾',
+      rescue_info: result.rows[0]
     });
   } catch (error: any) {
-    console.error('❌ Error al obtener mascotas:', error.message);
-    return res.status(500).json({ error: 'Error interno al obtener mascotas', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
