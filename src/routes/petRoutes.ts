@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { createOrUpdatePetProfile, getMyPets, getRescueProfile } from '../controllers/petController';
-import { authMiddleware } from '../middlewares/authMiddleware';
+import authMiddleware from '../middlewares/authMiddleware';
 
 const router = Router();
 
