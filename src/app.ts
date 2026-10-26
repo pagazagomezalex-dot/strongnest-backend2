@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { db } from './config/database';
+
 import authRoutes from './routes/authRoutes';
 import petRoutes from './routes/petRoutes';
 import telemetryRoutes from './routes/telemetryRoutes';
@@ -19,11 +20,6 @@ app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/geofences', geofenceRoutes);
 app.use('/api/alerts', alertRoutes);
 
-// Ruta Raíz (Mensaje de bienvenida)
-app.get('/', (req: Request, res: Response) => {
-  res.status(200).send('🐾 Backend de StrongNest activo y listo para la App Móvil 🚀');
-});
-
 // Health Check general
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
@@ -36,12 +32,10 @@ app.get('/health', (req: Request, res: Response) => {
 // Health Check de Base de Datos
 app.get('/health/db', async (req: Request, res: Response) => {
   try {
-    const result: any = await db.query('SELECT NOW() AS server_time;');
-    const rows = result?.rows || [];
-    const serverTime = rows.length > 0 ? rows[0].server_time : null;
+    const result = await db.query('SELECT NOW() AS server_time;');
     res.status(200).json({
       status: 'database_connected',
-      serverTime: serverTime
+      serverTime: result.rows.server_time
     });
   } catch (error: any) {
     console.error('❌ Error de conexión DB:', error.message);
@@ -52,5 +46,4 @@ app.get('/health/db', async (req: Request, res: Response) => {
   }
 });
 
-export default app;
 export { app };
