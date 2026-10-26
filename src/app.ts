@@ -35,7 +35,7 @@ app.get('/health/db', async (req: Request, res: Response) => {
     const result = await db.query('SELECT NOW() AS server_time;');
     res.status(200).json({
       status: 'database_connected',
-      serverTime: result.rows.server_time
+      serverTime: result.rows.server_time[0]
     });
   } catch (error: any) {
     console.error('❌ Error de conexión DB:', error.message);
