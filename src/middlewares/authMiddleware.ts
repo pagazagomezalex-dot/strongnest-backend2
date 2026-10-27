@@ -11,7 +11,13 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const token = authHeader.split(' ')[1];
+  const tokenParts = authHeader.split(' ');
+  const token = tokenParts[1];
+
+  if (!token) {
+    res.status(401).json({ error: 'Token no válido' });
+    return;
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
