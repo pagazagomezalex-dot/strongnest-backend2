@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 
-export const createOrUpdatePetProfile = async (req: Request, res: Response) => {
+export const createOrUpdatePetProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const {
@@ -37,7 +37,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response) => {
 
     res.status(201).json({
       message: 'Ficha médica y de rescate registrada exitosamente 🐾',
-      pet: result.rows[0] || result.rows
+      pet: result.rows[0]
     });
   } catch (error: any) {
     console.error('❌ Error al guardar perfil de mascota:', error.message);
@@ -45,7 +45,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response) => {
   }
 };
 
-export const getMyPets = async (req: Request, res: Response) => {
+export const getMyPets = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const result = await db.query('SELECT * FROM pets WHERE user_id = $1 ORDER BY created_at DESC;', [userId]);
@@ -55,7 +55,7 @@ export const getMyPets = async (req: Request, res: Response) => {
   }
 };
 
-export const getRescueProfile = async (req: Request, res: Response) => {
+export const getRescueProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const { rescue_code } = req.params;
     const result = await db.query(
@@ -72,7 +72,7 @@ export const getRescueProfile = async (req: Request, res: Response) => {
 
     res.status(200).json({
       title: 'FICHA PÚBLICA DE RESCATE - STRONGNEST PETS 🐾',
-      rescue_info: result.rows[0] || result.rows
+      rescue_info: result.rows[0]
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
