@@ -1,28 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-  };
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'strongnest_secret_key_2026';
 
-export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const authMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Acceso no autorizado: Token no proporcionado' });
+    return;
+  }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, decoded: any) => {
-      if (err) {
-        return res.status(403).json({ error: 'Token inválido o expirado' });
-      }
+  const token = authHeader.split(' ')[1];
 
-      req.user = decoded;
-      next();
-    });
-  } else {
-    return res.status(401).json({ error: 'Acceso no autorizado: Token no proporcionado' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    (req as any).user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Token inválido o expirado' });
   }
 };
+
+export default authMiddleware;
