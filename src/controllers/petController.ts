@@ -12,7 +12,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 
     const rescueCode = `RESCUE-${microchip_imei || 'SN-PET-' + Date.now()}`;
 
-    // Auto-migración defensiva para garantizar que la tabla tenga TODAS las columnas en Neon DB
+    // Auto-migración defensiva para garantizar columnas e índices únicos en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,7 +23,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
         birth_date DATE,
         weight_kg NUMERIC(5,2),
         color_markings TEXT,
-        microchip_imei VARCHAR(50) UNIQUE,
+        microchip_imei VARCHAR(50),
         blood_type VARCHAR(20),
         is_support_animal BOOLEAN DEFAULT FALSE,
         support_type VARCHAR(50),
@@ -32,7 +32,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
         vet_name VARCHAR(150),
         vet_phone VARCHAR(50),
         vaccination_record JSONB,
-        rescue_code VARCHAR(100) UNIQUE,
+        rescue_code VARCHAR(100),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -56,6 +56,9 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS rescue_code VARCHAR(100);
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS pets_microchip_imei_idx ON pets (microchip_imei);
+      CREATE UNIQUE INDEX IF NOT EXISTS pets_rescue_code_idx ON pets (rescue_code);
     `);
 
     const query = `
@@ -83,7 +86,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 
     res.status(201).json({
       message: 'Ficha médica y de rescate registrada exitosamente 🐾',
-      pet: result.rows
+      pet: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al guardar perfil de mascota:', error.message);
