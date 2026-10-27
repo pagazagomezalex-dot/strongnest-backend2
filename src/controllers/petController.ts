@@ -12,11 +12,12 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 
     const rescueCode = `RESCUE-${microchip_imei || 'SN-PET-' + Date.now()}`;
 
-    // 1. Auto-migración con restricción de unicidad formal para Neon DB
+    // 1. Auto-migración defensiva: asegurar ambas columnas (user_id y owner_id) sin restricciones estrictas
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID,
+        owner_id UUID,
         name VARCHAR(100),
         species VARCHAR(50),
         breed VARCHAR(100),
@@ -38,6 +39,9 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
       );
 
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS user_id UUID;
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id UUID;
+      ALTER TABLE pets ALTER COLUMN owner_id DROP NOT NULL;
+      ALTER TABLE pets ALTER COLUMN user_id DROP NOT NULL;
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS name VARCHAR(100);
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50);
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100);
@@ -65,13 +69,13 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
       END $$;
     `);
 
-    // 2. Inserción con casteo explícito a jsonb ($16::jsonb)
+    // 2. Inserción asignando el ID tanto a user_id como a owner_id
     const query = `
       INSERT INTO pets (
-        user_id, name, species, breed, birth_date, weight_kg, color_markings,
+        user_id, owner_id, name, species, breed, birth_date, weight_kg, color_markings,
         microchip_imei, blood_type, is_support_animal, support_type,
         allergies, medical_notes, vet_name, vet_phone, vaccination_record, rescue_code
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18)
       ON CONFLICT (microchip_imei) DO UPDATE SET
         name = EXCLUDED.name,
         species = EXCLUDED.species,
@@ -89,6 +93,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
       : JSON.stringify(vaccination_record || []);
 
     const values = [
+      userId,
       userId,
       name || 'Mascota',
       species || 'Desconocido',
@@ -112,7 +117,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 
     res.status(201).json({
       message: 'Ficha médica y de rescate registrada exitosamente 🐾',
-      pet: result.rows[0]
+      pet: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al guardar perfil de mascota:', error);
@@ -123,7 +128,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 export const getMyPets = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId || (req as any).user?.id;
-    const result = await db.query('SELECT * FROM pets WHERE user_id = $1 ORDER BY created_at DESC;', [userId]);
+    const result = await db.query('SELECT * FROM pets WHERE user_id = $1 OR owner_id = $1 ORDER BY created_at DESC;', [userId]);
     res.status(200).json({ pets: result.rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -147,7 +152,7 @@ export const getRescueProfile = async (req: Request, res: Response): Promise<voi
 
     res.status(200).json({
       title: 'FICHA PÚBLICA DE RESCATE - STRONGNEST PETS 🐾',
-      rescue_info: result.rows[0]
+      rescue_info: result.rows
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
