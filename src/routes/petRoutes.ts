@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createOrUpdatePetProfile, getMyPets, getRescueProfile } from '../controllers/petController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 
-const router: Router = Router();
+const router = Router();
 
 // 1. Ruta pública para escaneo QR de emergencia (sin token JWT)
 router.get('/rescue/:rescue_code', getRescueProfile);
