@@ -12,7 +12,7 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
 
     const rescueCode = `RESCUE-${microchip_imei || 'SN-PET-' + Date.now()}`;
 
-    // Auto-migración defensiva en Neon DB para asegurar que la tabla tenga todas las columnas
+    // Auto-migración defensiva para garantizar que la tabla tenga TODAS las columnas en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,6 +54,8 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS vet_phone VARCHAR(50);
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS vaccination_record JSONB;
       ALTER TABLE pets ADD COLUMN IF NOT EXISTS rescue_code VARCHAR(100);
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
     `);
 
     const query = `
