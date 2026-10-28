@@ -130,6 +130,28 @@ export const createOrUpdatePetProfile = async (req: Request, res: Response): Pro
   }
 };
 
+export const getMyPets = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId || (req as any).user?.id || null;
+    if (!userId) {
+      res.status(401).json({ error: 'Usuario no autenticado' });
+      return;
+    }
+
+    const result = await db.query(
+      `SELECT * FROM pets WHERE user_id = $1 OR owner_id = $1 ORDER BY created_at DESC;`,
+      [userId]
+    );
+
+    res.status(200).json({
+      pets: result.rows
+    });
+  } catch (error: any) {
+    console.error('❌ Error al obtener mascotas del usuario:', error);
+    res.status(500).json({ error: error.message || 'Error interno al obtener mascotas' });
+  }
+};
+
 export const getRescueProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const { rescue_code } = req.params;
