@@ -21,7 +21,7 @@ export const createGeofence = async (req: Request, res: Response): Promise<void>
   try {
     const { pet_id, name, center_latitude, center_longitude, radius_meters } = req.body;
 
-    if (!pet_id || !name || !center_latitude || !center_longitude || !radius_meters) {
+    if (!name || !center_latitude || !center_longitude || !radius_meters) {
       res.status(400).json({ error: 'Faltan campos obligatorios para la geocerca' });
       return;
     }
@@ -30,7 +30,7 @@ export const createGeofence = async (req: Request, res: Response): Promise<void>
     await db.query(`
       CREATE TABLE IF NOT EXISTS geofences (
         geofence_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        pet_id UUID REFERENCES pets(pet_id) ON DELETE CASCADE,
+        pet_id VARCHAR(100),
         name VARCHAR(100) NOT NULL,
         center_latitude NUMERIC(10, 8) NOT NULL,
         center_longitude NUMERIC(11, 8) NOT NULL,
@@ -46,8 +46,10 @@ export const createGeofence = async (req: Request, res: Response): Promise<void>
       RETURNING *;
     `;
 
+    const targetPetId = pet_id ? String(pet_id) : 'PRUEBA_MASCOTA_1';
+
     const result = await db.query(query, [
-      pet_id,
+      targetPetId,
       name,
       center_latitude,
       center_longitude,
@@ -56,7 +58,7 @@ export const createGeofence = async (req: Request, res: Response): Promise<void>
 
     res.status(201).json({
       message: 'Zona segura (Geocerca) creada con éxito 🛡️📍',
-      geofence: result.rows[0]
+      geofence: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al crear geocerca:', error);
@@ -89,14 +91,16 @@ export const checkGeofenceBreach = async (req: Request, res: Response): Promise<
   try {
     const { pet_id, current_latitude, current_longitude } = req.body;
 
-    if (!pet_id || !current_latitude || !current_longitude) {
-      res.status(400).json({ error: 'Faltan parámetros: pet_id, current_latitude, current_longitude' });
+    if (!current_latitude || !current_longitude) {
+      res.status(400).json({ error: 'Faltan parámetros: current_latitude, current_longitude' });
       return;
     }
 
+    const targetPetId = pet_id ? String(pet_id) : 'PRUEBA_MASCOTA_1';
+
     const geofencesResult = await db.query(
       `SELECT * FROM geofences WHERE pet_id = $1 AND is_active = TRUE;`,
-      [pet_id]
+      [targetPetId]
     );
 
     if (geofencesResult.rows.length === 0) {
@@ -126,7 +130,7 @@ export const checkGeofenceBreach = async (req: Request, res: Response): Promise<
     const hasBreach = evaluations.some((ev) => ev.status === 'OUT_OF_BOUNDS_ALERT');
 
     res.status(200).json({
-      pet_id,
+      pet_id: targetPetId,
       alert_status: hasBreach ? 'CRITICAL_ALERT_BREACH' : 'ALL_SAFE',
       evaluations
     });
@@ -134,4 +138,4 @@ export const checkGeofenceBreach = async (req: Request, res: Response): Promise<
     console.error('❌ Error al evaluar geocercas:', error);
     res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
-};;
+};
