@@ -40,15 +40,15 @@ export const ingestTelemetry = async (req: Request, res: Response): Promise<void
     `;
 
     const values = [
-      device_imei ? String(device_imei) : null,
-      pet_id ? String(pet_id) : null,
+      device_imei || null,
+      pet_id || null,
       latitude,
       longitude,
-      altitude ? Number(altitude) : null,
-      battery_level !== undefined && battery_level !== null ? Number(battery_level) : 100,
-      rssi ? Number(rssi) : null,
-      positioning_mode ? String(positioning_mode) : 'GPS',
-      Boolean(tamper_alert)
+      altitude || null,
+      battery_level || 100,
+      rssi || null,
+      positioning_mode || 'GPS',
+      tamper_alert || false
     ];
 
     const result = await db.query(query, values);
@@ -82,7 +82,7 @@ export const getLatestLocation = async (req: Request, res: Response): Promise<vo
     }
 
     res.status(200).json({
-      location: result.rows[0] || result.rows
+      location: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al obtener ubicación actual:', error);
@@ -94,8 +94,8 @@ export const getLatestLocation = async (req: Request, res: Response): Promise<vo
 export const getLocationHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { pet_id } = req.params;
-    const limitQuery = typeof req.query.limit === 'string' ? req.query.limit : '50';
-    const limitNum = parseInt(limitQuery, 10) || 50;
+    const limitStr = req.query.limit ? String(req.query.limit) : '50';
+    const limitNum = parseInt(limitStr, 10) || 50;
 
     const result = await db.query(
       `SELECT * FROM device_telemetry 
