@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes';
 import petRoutes from './routes/petRoutes';
 import medicalRoutes from './routes/medicalRoutes';
 import telemetryRoutes from './routes/telemetryRoutes';
+import geofenceRoutes from './routes/geofenceRoutes';
 
 const app: Application = express();
 
@@ -28,6 +29,7 @@ app.use('/api', authRoutes);
 app.use('/api', petRoutes);
 app.use('/api', medicalRoutes);
 app.use('/api', telemetryRoutes);
+app.use('/api', geofenceRoutes);
 
 // Manejo defensivo de rutas no encontradas (404)
 app.use((req: Request, res: Response) => {
