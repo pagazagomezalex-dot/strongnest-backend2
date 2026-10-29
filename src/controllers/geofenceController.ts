@@ -26,8 +26,10 @@ export const createGeofence = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    // Actualización de la estructura de la tabla geofences en Neon DB
     await db.query(`
-      CREATE TABLE IF NOT EXISTS geofences (
+      DROP TABLE IF EXISTS geofences CASCADE;
+      CREATE TABLE geofences (
         geofence_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         pet_id VARCHAR(100),
         name VARCHAR(100) NOT NULL,
