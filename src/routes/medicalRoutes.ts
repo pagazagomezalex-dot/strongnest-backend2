@@ -1,15 +1,15 @@
 import { Router } from 'express';
-import { 
-  createMedicalRecord, 
-  getPetMedicalRecords, 
-  deleteMedicalRecord 
-} from '../controllers/medicalController';
-import { authMiddleware } from '../middlewares/authMiddleware';
+import { addMedicalRecord, getPetMedicalHistory } from '../controllers/medicalController';
 
 const router = Router();
 
-router.post('/medical-records', authMiddleware, createMedicalRecord);
-router.get('/medical-records/:pet_id', authMiddleware, getPetMedicalRecords);
-router.delete('/medical-records/:record_id', authMiddleware, deleteMedicalRecord);
+// Endpoints de Ficha y Carnet Médico (con alias de compatibilidad de rutas)
+router.post('/records', addMedicalRecord);
+router.post('/medical/records', addMedicalRecord);
+
+router.get('/records/:pet_id', getPetMedicalHistory);
+router.get('/medical/records/:pet_id', getPetMedicalHistory);
+router.get('/pets/:pet_id/medical', getPetMedicalHistory);
+router.get('/medical/pets/:pet_id', getPetMedicalHistory);
 
 export default router;
