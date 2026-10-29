@@ -7,6 +7,7 @@ import authRoutes from './routes/authRoutes';
 import petRoutes from './routes/petRoutes';
 import reminderRoutes from './routes/reminderRoutes';
 import medicalRoutes from './routes/medicalRoutes';
+import telemetryRoutes from './routes/telemetryRoutes';
 
 const app: Application = express();
 
@@ -30,6 +31,7 @@ app.use('/api', authRoutes);
 app.use('/api', petRoutes);
 app.use('/api', reminderRoutes);
 app.use('/api', medicalRoutes);
+app.use('/api', telemetryRoutes);
 
 // Manejo defensivo de rutas no encontradas (404)
 app.use((req: Request, res: Response) => {
