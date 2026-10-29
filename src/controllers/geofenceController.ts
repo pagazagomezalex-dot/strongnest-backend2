@@ -1,133 +1,140 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    user_id: string;
-    email: string;
-  };
-}
+// Función matemática auxiliar: Fórmula de Haversine para calcular distancia en metros entre dos puntos GPS
+const calculateDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371000; // Radio de la Tierra en metros
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
-// 1. Crear o actualizar perfil de mascota
-export const createOrUpdatePetProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// 1. Crear una Zona Segura (Geocerca) para una mascota
+export const createGeofence = async (req: Request, res: Response): Promise<void> => {
   try {
-    const user_id = req.user?.user_id;
-    const { 
-      pet_id, name, species, breed, age, weight, 
-      medical_notes, emergency_contact, is_lost 
-    } = req.body;
+    const { pet_id, name, center_latitude, center_longitude, radius_meters } = req.body;
 
-    if (!name) {
-      res.status(400).json({ error: 'El nombre de la mascota es obligatorio' });
+    if (!name || !center_latitude || !center_longitude || !radius_meters) {
+      res.status(400).json({ error: 'Faltan campos obligatorios para la geocerca' });
       return;
     }
 
-    // Auto-migración defensiva para la tabla pets en Neon DB
     await db.query(`
-      CREATE TABLE IF NOT EXISTS pets (
-        pet_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+      CREATE TABLE IF NOT EXISTS geofences (
+        geofence_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        pet_id VARCHAR(100),
         name VARCHAR(100) NOT NULL,
-        species VARCHAR(50) DEFAULT 'Dog',
-        breed VARCHAR(100),
-        age INT,
-        weight NUMERIC(5, 2),
-        medical_notes TEXT,
-        emergency_contact VARCHAR(100),
-        is_lost BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        center_latitude NUMERIC(10, 8) NOT NULL,
+        center_longitude NUMERIC(11, 8) NOT NULL,
+        radius_meters INT NOT NULL DEFAULT 100,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    if (pet_id) {
-      // Actualizar perfil existente
-      const updateQuery = `
-        UPDATE pets 
-        SET name = $1, species = $2, breed = $3, age = $4, weight = $5, 
-            medical_notes = $6, emergency_contact = $7, is_lost = $8, updated_at = CURRENT_TIMESTAMP
-        WHERE pet_id = $9
-        RETURNING *;
-      `;
-      const result = await db.query(updateQuery, [
-        name, species || 'Dog', breed || null, age || null, weight || null,
-        medical_notes || null, emergency_contact || null, is_lost || false,
-        pet_id
-      ]);
+    const query = `
+      INSERT INTO geofences (pet_id, name, center_latitude, center_longitude, radius_meters)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *;
+    `;
 
-      if (result.rows.length === 0) {
-        res.status(404).json({ error: 'Mascota no encontrada' });
-        return;
-      }
+    const targetPetId = pet_id ? String(pet_id) : 'PRUEBA_MASCOTA_1';
 
-      res.status(200).json({
-        message: 'Perfil de mascota actualizado con éxito 🐾',
-        pet: result.rows
-      });
-    } else {
-      // Crear nuevo perfil
-      const insertQuery = `
-        INSERT INTO pets (user_id, name, species, breed, age, weight, medical_notes, emergency_contact, is_lost)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING *;
-      `;
-      const result = await db.query(insertQuery, [
-        user_id || null, name, species || 'Dog', breed || null, age || null, weight || null,
-        medical_notes || null, emergency_contact || null, is_lost || false
-      ]);
+    const result = await db.query(query, [
+      targetPetId,
+      name,
+      center_latitude,
+      center_longitude,
+      radius_meters
+    ]);
 
-      res.status(201).json({
-        message: 'Perfil de mascota creado con éxito 🐾',
-        pet: result.rows
-      });
-    }
-  } catch (error: any) {
-    console.error('❌ Error en createOrUpdatePetProfile:', error);
-    res.status(500).json({ error: error.message || 'Error interno del servidor' });
-  }
-};
-
-// 2. Obtener todas las mascotas del usuario autenticado
-export const getMyPets = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const user_id = req.user?.user_id;
-
-    const result = await db.query(
-      `SELECT * FROM pets ${user_id ? 'WHERE user_id = $1' : ''} ORDER BY created_at DESC;`,
-      user_id ? [user_id] : []
-    );
-
-    res.status(200).json({
-      count: result.rows.length,
-      pets: result.rows
+    res.status(201).json({
+      message: 'Zona segura (Geocerca) creada con éxito 🛡️📍',
+      geofence: result.rows
     });
   } catch (error: any) {
-    console.error('❌ Error en getMyPets:', error);
+    console.error('❌ Error al crear geocerca:', error);
     res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
 };
 
-// 3. Obtener perfil público de rescate / Ficha Médica QR
-export const getRescueProfile = async (req: Request, res: Response): Promise<void> => {
+// 2. Obtener todas las geocercas activas de una mascota
+export const getPetGeofences = async (req: Request, res: Response): Promise<void> => {
   try {
     const { pet_id } = req.params;
 
     const result = await db.query(
-      `SELECT pet_id, name, species, breed, age, weight, medical_notes, emergency_contact, is_lost 
-       FROM pets WHERE pet_id = $1;`,
+      `SELECT * FROM geofences WHERE pet_id = $1 AND is_active = TRUE;`,
       [pet_id]
     );
 
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Ficha de rescate no encontrada' });
+    res.status(200).json({
+      count: result.rows.length,
+      geofences: result.rows
+    });
+  } catch (error: any) {
+    console.error('❌ Error al consultar geocercas:', error);
+    res.status(500).json({ error: error.message || 'Error interno del servidor' });
+  }
+};
+
+// 3. Evaluar si la ubicación actual de la mascota está dentro o fuera de sus geocercas
+export const checkGeofenceBreach = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { pet_id, current_latitude, current_longitude } = req.body;
+
+    if (!current_latitude || !current_longitude) {
+      res.status(400).json({ error: 'Faltan parámetros: current_latitude, current_longitude' });
       return;
     }
 
+    const targetPetId = pet_id ? String(pet_id) : 'PRUEBA_MASCOTA_1';
+
+    const geofencesResult = await db.query(
+      `SELECT * FROM geofences WHERE pet_id = $1 AND is_active = TRUE;`,
+      [targetPetId]
+    );
+
+    if (geofencesResult.rows.length === 0) {
+      res.status(200).json({ message: 'La mascota no tiene zonas seguras configuradas' });
+      return;
+    }
+
+    const evaluations = geofencesResult.rows.map((fence: any) => {
+      const distance = calculateDistanceMeters(
+        Number(current_latitude),
+        Number(current_longitude),
+        Number(fence.center_latitude),
+        Number(fence.center_longitude)
+      );
+
+      const isInside = distance <= Number(fence.radius_meters);
+
+      return {
+        geofence_id: fence.geofence_id,
+        geofence_name: fence.name,
+        radius_meters: Number(fence.radius_meters),
+        distance_meters: Math.round(distance),
+        status: isInside ? 'SAFE' : 'OUT_OF_BOUNDS_ALERT'
+      };
+    });
+
+    const hasBreach = evaluations.some((ev) => ev.status === 'OUT_OF_BOUNDS_ALERT');
+
     res.status(200).json({
-      rescue_profile: result.rows
+      pet_id: targetPetId,
+      alert_status: hasBreach ? 'CRITICAL_ALERT_BREACH' : 'ALL_SAFE',
+      evaluations
     });
   } catch (error: any) {
-    console.error('❌ Error en getRescueProfile:', error);
+    console.error('❌ Error al evaluar geocercas:', error);
     res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
 };
