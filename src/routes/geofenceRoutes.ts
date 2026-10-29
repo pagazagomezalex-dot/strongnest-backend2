@@ -1,13 +1,15 @@
 import { Router } from 'express';
-import { createGeofence, checkGeofenceStatus, updateGeofence } from '../controllers/geofenceController';
-import { authenticateJWT } from '../middlewares/authMiddleware';
+import { 
+  createGeofence, 
+  getPetGeofences, 
+  checkGeofenceBreach 
+} from '../controllers/geofenceController';
 
 const router = Router();
 
-router.use(authenticateJWT);
-
-router.post('/', createGeofence);
-router.get('/:petId/status', checkGeofenceStatus);
-router.put('/:geofenceId', updateGeofence);
+// Endpoints de Zonas Seguras
+router.post('/geofences', createGeofence);
+router.get('/pets/:pet_id/geofences', getPetGeofences);
+router.post('/geofences/check', checkGeofenceBreach);
 
 export default router;
