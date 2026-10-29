@@ -40,22 +40,22 @@ export const ingestTelemetry = async (req: Request, res: Response): Promise<void
     `;
 
     const values = [
-      device_imei || null,
-      pet_id || null,
+      device_imei ? String(device_imei) : null,
+      pet_id ? String(pet_id) : null,
       latitude,
       longitude,
-      altitude || null,
-      battery_level ?? 100,
-      rssi || null,
-      positioning_mode || 'GPS',
-      tamper_alert || false
+      altitude ? Number(altitude) : null,
+      battery_level !== undefined && battery_level !== null ? Number(battery_level) : 100,
+      rssi ? Number(rssi) : null,
+      positioning_mode ? String(positioning_mode) : 'GPS',
+      Boolean(tamper_alert)
     ];
 
     const result = await db.query(query, values);
 
     res.status(201).json({
       message: 'Ping de telemetría registrado con éxito 📡📍',
-      telemetry: result.rows[0]
+      telemetry: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al procesar ping de telemetría:', error);
@@ -82,7 +82,7 @@ export const getLatestLocation = async (req: Request, res: Response): Promise<vo
     }
 
     res.status(200).json({
-      location: result.rows[0]
+      location: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al obtener ubicación actual:', error);
@@ -94,14 +94,15 @@ export const getLatestLocation = async (req: Request, res: Response): Promise<vo
 export const getLocationHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { pet_id } = req.params;
-    const { limit = '50' } = req.query;
+    const limitQuery = typeof req.query.limit === 'string' ? req.query.limit : '50';
+    const limitNum = parseInt(limitQuery, 10) || 50;
 
     const result = await db.query(
       `SELECT * FROM device_telemetry 
        WHERE pet_id = $1 
        ORDER BY recorded_at DESC 
        LIMIT $2;`,
-      [pet_id, parseInt(limit as string, 10) || 50]
+      [pet_id, limitNum]
     );
 
     res.status(200).json({
@@ -112,4 +113,4 @@ export const getLocationHistory = async (req: Request, res: Response): Promise<v
     console.error('❌ Error al obtener historial de ubicación:', error);
     res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
-};;
+};
