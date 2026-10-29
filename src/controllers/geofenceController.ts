@@ -1,131 +1,137 @@
-import { Response } from 'express';
-import { AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { Request, Response } from 'express';
 import { db } from '../config/database';
 
-function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
+// Función matemática auxiliar: Fórmula de Haversine para calcular distancia en metros entre dos puntos GPS
+const calculateDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371000; // Radio de la Tierra en metros
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
-}
+};
 
-export const createGeofence = async (req: AuthenticatedRequest, res: Response) => {
-  const { pet_id, name, center_lat, center_lng, radius_meters } = req.body;
-
-  if (!pet_id || !center_lat || !center_lng || !radius_meters) {
-    return res.status(400).json({ error: 'pet_id, centro (lat/lng) y radio en metros son obligatorios' });
-  }
-
+// 1. Crear una Zona Segura (Geocerca) para una mascota
+export const createGeofence = async (req: Request, res: Response): Promise<void> => {
   try {
+    const { pet_id, name, center_latitude, center_longitude, radius_meters } = req.body;
+
+    if (!pet_id || !name || !center_latitude || !center_longitude || !radius_meters) {
+      res.status(400).json({ error: 'Faltan campos obligatorios para la geocerca' });
+      return;
+    }
+
+    // Auto-migración defensiva para la tabla geofences
     await db.query(`
       CREATE TABLE IF NOT EXISTS geofences (
-        geofence_id BIGSERIAL PRIMARY KEY,
+        geofence_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         pet_id UUID REFERENCES pets(pet_id) ON DELETE CASCADE,
-        name VARCHAR(100) DEFAULT 'Zona Segura',
-        center_lat DECIMAL(10, 8) NOT NULL,
-        center_lng DECIMAL(11, 8) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        center_latitude NUMERIC(10, 8) NOT NULL,
+        center_longitude NUMERIC(11, 8) NOT NULL,
         radius_meters INT NOT NULL DEFAULT 100,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    const result = await db.query(
-      `INSERT INTO geofences (pet_id, name, center_lat, center_lng, radius_meters)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *;`,
-      [pet_id, name || 'Casa / Zona Segura', center_lat, center_lng, radius_meters]
-    );
+    const query = `
+      INSERT INTO geofences (pet_id, name, center_latitude, center_longitude, radius_meters)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *;
+    `;
 
-    return res.status(201).json({
-      message: '🛡️ Geocerca creada con éxito',
+    const result = await db.query(query, [
+      pet_id,
+      name,
+      center_latitude,
+      center_longitude,
+      radius_meters
+    ]);
+
+    res.status(201).json({
+      message: 'Zona segura (Geocerca) creada con éxito 🛡️📍',
       geofence: result.rows[0]
     });
   } catch (error: any) {
-    console.error('❌ Error al crear geocerca:', error.message);
-    return res.status(500).json({ error: 'Error al crear geocerca', details: error.message });
+    console.error('❌ Error al crear geocerca:', error);
+    res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
 };
 
-// Editar/Modificar radio o centro de una geocerca existente
-export const updateGeofence = async (req: AuthenticatedRequest, res: Response) => {
-  const { geofenceId } = req.params;
-  const { name, center_lat, center_lng, radius_meters } = req.body;
-
+// 2. Obtener todas las geocercas activas de una mascota
+export const getPetGeofences = async (req: Request, res: Response): Promise<void> => {
   try {
-    const existing = await db.query('SELECT * FROM geofences WHERE geofence_id = $1;', [geofenceId]);
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Geocerca no encontrada' });
-    }
-
-    const current = existing.rows[0];
-
-    const updatedName = name !== undefined ? name : current.name;
-    const updatedLat = center_lat !== undefined ? center_lat : current.center_lat;
-    const updatedLng = center_lng !== undefined ? center_lng : current.center_lng;
-    const updatedRadius = radius_meters !== undefined ? radius_meters : current.radius_meters;
+    const { pet_id } = req.params;
 
     const result = await db.query(
-      `UPDATE geofences
-       SET name = $1, center_lat = $2, center_lng = $3, radius_meters = $4
-       WHERE geofence_id = $5
-       RETURNING *;`,
-      [updatedName, updatedLat, updatedLng, updatedRadius, geofenceId]
+      `SELECT * FROM geofences WHERE pet_id = $1 AND is_active = TRUE;`,
+      [pet_id]
     );
 
-    return res.status(200).json({
-      message: '⚙️ Radio/Geocerca actualizada con éxito',
-      geofence: result.rows[0]
+    res.status(200).json({
+      count: result.rows.length,
+      geofences: result.rows
     });
   } catch (error: any) {
-    console.error('❌ Error al actualizar geocerca:', error.message);
-    return res.status(500).json({ error: 'Error al actualizar geocerca', details: error.message });
+    console.error('❌ Error al consultar geocercas:', error);
+    res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
 };
 
-export const checkGeofenceStatus = async (req: AuthenticatedRequest, res: Response) => {
-  const { petId } = req.params;
-
+// 3. Evaluar si la ubicación actual de la mascota está dentro o fuera de sus geocercas
+export const checkGeofenceBreach = async (req: Request, res: Response): Promise<void> => {
   try {
-    const locRes = await db.query(
-      `SELECT t.latitude, t.longitude, p.name FROM pets p
-       JOIN telemetry_logs t ON p.device_imei = t.device_imei
-       WHERE p.pet_id = $1 ORDER BY t.recorded_at DESC LIMIT 1;`,
-      [petId]
-    );
+    const { pet_id, current_latitude, current_longitude } = req.body;
 
-    if (locRes.rows.length === 0) {
-      return res.status(404).json({ error: 'No hay coordenadas registradas para esta mascota' });
+    if (!pet_id || !current_latitude || !current_longitude) {
+      res.status(400).json({ error: 'Faltan parámetros: pet_id, current_latitude, current_longitude' });
+      return;
     }
 
-    const { latitude, longitude, name } = locRes.rows[0];
-    const geoRes = await db.query('SELECT * FROM geofences WHERE pet_id = $1 ORDER BY geofence_id DESC LIMIT 1;', [petId]);
-
-    if (geoRes.rows.length === 0) {
-      return res.status(200).json({ status: 'NO_GEOFENCE', message: 'No hay geocerca configurada para esta mascota' });
-    }
-
-    const geofence = geoRes.rows[0];
-    const distance = calculateDistanceMeters(
-      parseFloat(latitude), parseFloat(longitude),
-      parseFloat(geofence.center_lat), parseFloat(geofence.center_lng)
+    const geofencesResult = await db.query(
+      `SELECT * FROM geofences WHERE pet_id = $1 AND is_active = TRUE;`,
+      [pet_id]
     );
 
-    const isInside = distance <= geofence.radius_meters;
+    if (geofencesResult.rows.length === 0) {
+      res.status(200).json({ message: 'La mascota no tiene zonas seguras configuradas' });
+      return;
+    }
 
-    return res.status(200).json({
-      pet_name: name,
-      geofence_name: geofence.name,
-      distance_from_center_meters: Math.round(distance),
-      radius_meters: geofence.radius_meters,
-      is_inside: isInside,
-      alert: isInside ? '✅ Mascota dentro del perímetro seguro' : '🚨 ALERTA: ¡Mascota fuera de la Zona Segura!'
+    const evaluations = geofencesResult.rows.map((fence: any) => {
+      const distance = calculateDistanceMeters(
+        Number(current_latitude),
+        Number(current_longitude),
+        Number(fence.center_latitude),
+        Number(fence.center_longitude)
+      );
+
+      const isInside = distance <= Number(fence.radius_meters);
+
+      return {
+        geofence_id: fence.geofence_id,
+        geofence_name: fence.name,
+        radius_meters: Number(fence.radius_meters),
+        distance_meters: Math.round(distance),
+        status: isInside ? 'SAFE' : 'OUT_OF_BOUNDS_ALERT'
+      };
+    });
+
+    const hasBreach = evaluations.some((ev) => ev.status === 'OUT_OF_BOUNDS_ALERT');
+
+    res.status(200).json({
+      pet_id,
+      alert_status: hasBreach ? 'CRITICAL_ALERT_BREACH' : 'ALL_SAFE',
+      evaluations
     });
   } catch (error: any) {
-    console.error('❌ Error al evaluar geocerca:', error.message);
-    return res.status(500).json({ error: 'Error interno de geocerca', details: error.message });
+    console.error('❌ Error al evaluar geocercas:', error);
+    res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
-};
+};;
