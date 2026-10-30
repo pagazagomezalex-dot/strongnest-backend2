@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 
-// 1. Ingesta de Telemetría GPS
 export const sendTelemetry = async (req: Request, res: Response): Promise<void> => {
   try {
     const { pet_id, latitude, longitude, battery_level, speed, sat_count } = req.body;
@@ -11,6 +10,7 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Auto-migración defensiva de esquema
     await db.query(`
       CREATE TABLE IF NOT EXISTS telemetry (
         telemetry_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -22,6 +22,9 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
         sat_count INT DEFAULT 10,
         timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS speed NUMERIC(5, 2) DEFAULT 0.0;
+      ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS sat_count INT DEFAULT 10;
+      ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS battery_level INT DEFAULT 100;
     `);
 
     const query = `
@@ -32,11 +35,11 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
 
     const result = await db.query(query, [
       String(pet_id),
-      latitude,
-      longitude,
-      battery_level || 100,
-      speed || 0.0,
-      sat_count || 10
+      Number(latitude),
+      Number(longitude),
+      battery_level !== undefined ? Number(battery_level) : 100,
+      speed !== undefined ? Number(speed) : 0.0,
+      sat_count !== undefined ? Number(sat_count) : 10
     ]);
 
     res.status(201).json({
@@ -49,10 +52,8 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// Alias explícito de exportación para compatibilidad
 export const ingestTelemetry = sendTelemetry;
 
-// 2. Obtener la última posición GPS conocida
 export const getLatestTelemetry = async (req: Request, res: Response): Promise<void> => {
   try {
     const { pet_id } = req.params;
@@ -68,7 +69,7 @@ export const getLatestTelemetry = async (req: Request, res: Response): Promise<v
     }
 
     res.status(200).json({
-      latest_telemetry: result.rows[0]
+      latest_telemetry: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al obtener telemetría:', error);
