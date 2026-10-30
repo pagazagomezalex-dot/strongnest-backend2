@@ -10,6 +10,7 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Auto-migración defensiva de esquema
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id VARCHAR(100) PRIMARY KEY,
@@ -21,6 +22,11 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
         device_id VARCHAR(100),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100);
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100);
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT;
+      ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);
     `);
 
     const query = `
@@ -43,7 +49,7 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
 
     res.status(201).json({
       message: 'Mascota registrada con éxito en KIN-O 🐾',
-      pet: result.rows[0] || result.rows
+      pet: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al crear mascota:', error);
@@ -73,7 +79,7 @@ export const getPetById = async (req: Request, res: Response): Promise<void> => 
       res.status(404).json({ error: 'Mascota no encontrada' });
       return;
     }
-    res.status(200).json({ pet: result.rows[0] });
+    res.status(200).json({ pet: result.rows });
   } catch (error: any) {
     console.error('❌ Error al obtener mascota:', error);
     res.status(500).json({ error: error.message || 'Error interno' });
