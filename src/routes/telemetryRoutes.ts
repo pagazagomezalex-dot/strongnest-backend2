@@ -3,7 +3,7 @@ import { sendTelemetry, getLatestTelemetry } from '../controllers/telemetryContr
 
 const router = Router();
 
-// Alias de compatibilidad para ingesta de telemetría GPS
+// Alias de compatibilidad para ingesta GPS
 router.post('/telemetry', sendTelemetry);
 router.post('/telemetry/ingest', sendTelemetry);
 router.post('/telemetry/data', sendTelemetry);
