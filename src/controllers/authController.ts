@@ -2,12 +2,10 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import crypto from 'crypto';
 
-// Función auxiliar para encriptado seguro usando módulos nativos de Node.js
 const hashPassword = (password: string): string => {
   return crypto.createHash('sha256').update(password).digest('hex');
 };
 
-// 1. Registro de Usuarios (Tutores KIN-O)
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, full_name } = req.body;
@@ -17,7 +15,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // Auto-creación de tabla 'users' en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS users (
         user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,7 +25,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       );
     `);
 
-    // Verificar si el correo ya existe
     const existing = await db.query(`SELECT * FROM users WHERE email = $1;`, [email.toLowerCase().trim()]);
     if (existing.rows.length > 0) {
       res.status(409).json({ error: 'El correo electrónico ya se encuentra registrado' });
@@ -36,7 +32,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     }
 
     const hashedPassword = hashPassword(password);
-
     const result = await db.query(
       `INSERT INTO users (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING user_id, email, full_name, created_at;`,
       [email.toLowerCase().trim(), hashedPassword, full_name]
@@ -51,12 +46,11 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       token
     });
   } catch (error: any) {
-    console.error('❌ Error en Registro de Usuario:', error);
+    console.error('❌ Error en Registro:', error);
     res.status(500).json({ error: error.message || 'Error interno al registrar usuario' });
   }
 };
 
-// 2. Inicio de Sesión (Login de Tutor)
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -93,6 +87,6 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     console.error('❌ Error en Login:', error);
-    res.status(500).json({ error: error.message || 'Error interno en inicio de sesión' });
+    res.status(500).json({ error: error.message || 'Error interno en login' });
   }
 };
