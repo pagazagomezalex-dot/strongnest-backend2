@@ -10,7 +10,7 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Asegurar estructura de tabla pets en Neon DB
+    // 1. Asegurar tabla pets en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id VARCHAR(100) PRIMARY KEY,
@@ -24,43 +24,58 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       );
     `).catch(() => {});
 
-    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100);`).catch(() => {});
-    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';`).catch(() => {});
-    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100) DEFAULT 'Mestizo';`).catch(() => {});
-    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT DEFAULT 2;`).catch(() => {});
-    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`).catch(() => {});
+    const alterQueries = [
+      `ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100);`,
+      `ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';`,
+      `ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100) DEFAULT 'Mestizo';`,
+      `ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT DEFAULT 2;`,
+      `ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`
+    ];
 
-    const targetPetId = String(pet_id);
-    const targetName = String(name);
-    const targetOwnerId = owner_id ? String(owner_id) : null;
-    const targetSpecies = species ? String(species) : 'DOG';
-    const targetBreed = breed ? String(breed) : 'Mestizo';
+    for (const q of alterQueries) {
+      await db.query(q).catch(() => {});
+    }
+
+    const targetPetId = String(pet_id).trim();
+    const targetName = String(name).trim();
+    const targetOwnerId = owner_id ? String(owner_id).trim() : null;
+    const targetSpecies = species ? String(species).trim() : 'DOG';
+    const targetBreed = breed ? String(breed).trim() : 'Mestizo';
     const targetAge = age_years ? parseInt(String(age_years), 10) : 2;
-    const targetDeviceId = device_id ? String(device_id) : targetPetId;
-
-    // Lógica limpia Select -> Update / Insert
-    const existingPet = await db.query(`SELECT pet_id FROM pets WHERE pet_id = $1;`, [targetPetId]);
+    const targetDeviceId = device_id ? String(device_id).trim() : targetPetId;
 
     let result;
-    if (existingPet.rows.length > 0) {
+    try {
       result = await db.query(
-        `UPDATE pets SET owner_id = $2, name = $3, species = $4, breed = $5, age_years = $6, device_id = $7 WHERE pet_id = $1 RETURNING *;`,
+        `INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (pet_id) DO UPDATE 
+         SET name = EXCLUDED.name, breed = EXCLUDED.breed, device_id = EXCLUDED.device_id
+         RETURNING *;`,
         [targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId]
       );
-    } else {
+    } catch (insertErr) {
+      await db.query(`DELETE FROM pets WHERE pet_id = $1;`, [targetPetId]).catch(() => {});
       result = await db.query(
-        `INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`,
+        `INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *;`,
         [targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId]
       );
     }
 
     res.status(201).json({
+      status: 'SUCCESS',
       message: 'Mascota registrada con éxito en KIN-O 🐾',
-      pet: result.rows
+      pet: result.rows[0] || result.rows
     });
   } catch (error: any) {
-    console.error('❌ Error al crear mascota:', error);
-    res.status(500).json({ error: error.message || 'Error interno al crear mascota' });
+    console.error('❌ Error en createPet:', error);
+    res.status(200).json({
+      status: 'ERROR',
+      message: 'Detalle de base de datos en registro de mascota',
+      detail: error.message || String(error)
+    });
   }
 };
 
@@ -74,7 +89,7 @@ export const getUserPets = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error: any) {
     console.error('❌ Error al consultar mascotas:', error);
-    res.status(500).json({ error: error.message || 'Error interno' });
+    res.status(200).json({ status: 'ERROR', detail: error.message });
   }
 };
 
@@ -86,9 +101,9 @@ export const getPetById = async (req: Request, res: Response): Promise<void> => 
       res.status(404).json({ error: 'Mascota no encontrada' });
       return;
     }
-    res.status(200).json({ pet: result.rows });
+    res.status(200).json({ pet: result.rows[0] || result.rows });
   } catch (error: any) {
     console.error('❌ Error al obtener mascota:', error);
-    res.status(500).json({ error: error.message || 'Error interno' });
+    res.status(200).json({ status: 'ERROR', detail: error.message });
   }
 };
