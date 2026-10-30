@@ -10,24 +10,28 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Auto-migración defensiva de esquema
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS pets (
-        pet_id VARCHAR(100) PRIMARY KEY,
-        owner_id VARCHAR(100),
-        name VARCHAR(100) NOT NULL,
-        species VARCHAR(50) DEFAULT 'DOG',
-        breed VARCHAR(100),
-        age_years INT,
-        device_id VARCHAR(100),
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-      );
-      ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100);
-      ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';
-      ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100);
-      ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT;
-      ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);
-    `);
+    // Verificación defensiva de la tabla
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS pets (
+          pet_id VARCHAR(100) PRIMARY KEY,
+          owner_id VARCHAR(100),
+          name VARCHAR(100) NOT NULL,
+          species VARCHAR(50) DEFAULT 'DOG',
+          breed VARCHAR(100),
+          age_years INT DEFAULT 2,
+          device_id VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100);`);
+      await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';`);
+      await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100);`);
+      await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT DEFAULT 2;`);
+      await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`);
+    } catch (schemaErr) {
+      console.log('Esquema pets verificado:', schemaErr);
+    }
 
     const query = `
       INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
@@ -43,13 +47,13 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       String(name),
       species ? String(species) : 'DOG',
       breed ? String(breed) : 'Mestizo',
-      age_years ? Number(age_years) : 2,
+      age_years ? parseInt(String(age_years), 10) : 2,
       device_id ? String(device_id) : String(pet_id)
     ]);
 
     res.status(201).json({
       message: 'Mascota registrada con éxito en KIN-O 🐾',
-      pet: result.rows
+      pet: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al crear mascota:', error);
@@ -79,7 +83,7 @@ export const getPetById = async (req: Request, res: Response): Promise<void> => 
       res.status(404).json({ error: 'Mascota no encontrada' });
       return;
     }
-    res.status(200).json({ pet: result.rows });
+    res.status(200).json({ pet: result.rows[0] || result.rows });
   } catch (error: any) {
     console.error('❌ Error al obtener mascota:', error);
     res.status(500).json({ error: error.message || 'Error interno' });
