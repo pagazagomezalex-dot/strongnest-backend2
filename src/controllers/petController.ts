@@ -33,17 +33,17 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
 
     const result = await db.query(query, [
       String(pet_id),
-      owner_id || null,
-      name,
-      species || 'DOG',
-      breed || 'Mestizo',
-      age_years || 2,
-      device_id || pet_id
+      owner_id ? String(owner_id) : null,
+      String(name),
+      species ? String(species) : 'DOG',
+      breed ? String(breed) : 'Mestizo',
+      age_years ? Number(age_years) : 2,
+      device_id ? String(device_id) : String(pet_id)
     ]);
 
     res.status(201).json({
       message: 'Mascota registrada con éxito en KIN-O 🐾',
-      pet: result.rows[0]
+      pet: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al crear mascota:', error);
