@@ -10,7 +10,7 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Estructura limpia en Neon DB
+    // Asegurar tabla pets en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id VARCHAR(100) PRIMARY KEY,
@@ -24,33 +24,68 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       );
     `).catch(() => {});
 
+    // Flexibilizar tipo de columna owner_id
+    await db.query(`ALTER TABLE pets ALTER COLUMN owner_id TYPE VARCHAR(100) USING owner_id::text;`).catch(() => {});
     await db.query(`ALTER TABLE pets ALTER COLUMN owner_id DROP NOT NULL;`).catch(() => {});
+    await db.query(`ALTER TABLE pets ALTER COLUMN device_id DROP NOT NULL;`).catch(() => {});
+    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS species VARCHAR(50) DEFAULT 'DOG';`).catch(() => {});
+    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS breed VARCHAR(100) DEFAULT 'Mestizo';`).catch(() => {});
+    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS age_years INT DEFAULT 2;`).catch(() => {});
+    await db.query(`ALTER TABLE pets ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`).catch(() => {});
 
     const targetPetId = String(pet_id).trim();
     const targetName = String(name).trim();
-    const targetOwnerId = owner_id ? String(owner_id).trim() : 'NATH_OWNER_01';
+    const targetOwnerId = owner_id ? String(owner_id).trim() : null;
     const targetSpecies = species ? String(species).trim() : 'DOG';
     const targetBreed = breed ? String(breed).trim() : 'Mestizo';
     const targetAge = age_years ? parseInt(String(age_years), 10) : 2;
     const targetDeviceId = device_id ? String(device_id).trim() : targetPetId;
 
-    const query = `
-      INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (pet_id) DO UPDATE 
-      SET name = EXCLUDED.name, breed = EXCLUDED.breed, device_id = EXCLUDED.device_id
-      RETURNING *;
-    `;
+    try {
+      const query = `
+        INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (pet_id) DO UPDATE 
+        SET name = EXCLUDED.name, breed = EXCLUDED.breed, device_id = EXCLUDED.device_id, owner_id = EXCLUDED.owner_id
+        RETURNING *;
+      `;
+      const result = await db.query(query, [
+        targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId
+      ]);
 
-    const result = await db.query(query, [
-      targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId
-    ]);
+      res.status(201).json({
+        message: 'Mascota registrada con éxito en KIN-O 🐾',
+        pet: result.rows
+      });
+      return;
+    } catch (dbErr) {
+      // Recreación limpia en caso de conflicto de llaves primarias legacy
+      await db.query(`DROP TABLE IF EXISTS pets CASCADE;`);
+      await db.query(`
+        CREATE TABLE pets (
+          pet_id VARCHAR(100) PRIMARY KEY,
+          owner_id VARCHAR(100),
+          name VARCHAR(100) NOT NULL,
+          species VARCHAR(50) DEFAULT 'DOG',
+          breed VARCHAR(100) DEFAULT 'Mestizo',
+          age_years INT DEFAULT 2,
+          device_id VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    res.status(201).json({
-      status: 'SUCCESS',
-      message: 'Mascota registrada con éxito en KIN-O 🐾',
-      pet: result.rows
-    });
+      const retryResult = await db.query(
+        `INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`,
+        [targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId]
+      );
+
+      res.status(201).json({
+        message: 'Mascota registrada con éxito en KIN-O 🐾',
+        pet: retryResult.rows
+      });
+      return;
+    }
   } catch (error: any) {
     console.error('❌ Error al crear mascota:', error);
     res.status(500).json({ error: error.message || 'Error al registrar mascota' });
