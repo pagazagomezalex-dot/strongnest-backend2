@@ -1,18 +1,14 @@
 import { Router } from 'express';
-import { 
-  ingestTelemetry, 
-  getLatestLocation, 
-  getLocationHistory 
-} from '../controllers/telemetryController';
-import { authMiddleware } from '../middlewares/authMiddleware';
+import { sendTelemetry, getLatestTelemetry } from '../controllers/telemetryController';
 
 const router = Router();
 
-// Endpoint de ingesta de pings (usado por tarjetas SIM/eSIM IoT y simuladores)
-router.post('/telemetry/ingest', ingestTelemetry);
+// Alias de compatibilidad para ingesta de telemetría GPS
+router.post('/telemetry', sendTelemetry);
+router.post('/telemetry/ingest', sendTelemetry);
+router.post('/telemetry/data', sendTelemetry);
 
-// Endpoints consultados por la App Móvil (protegidos con Token JWT)
-router.get('/pets/:pet_id/location', authMiddleware, getLatestLocation);
-router.get('/pets/:pet_id/history', authMiddleware, getLocationHistory);
+router.get('/telemetry/:pet_id/latest', getLatestTelemetry);
+router.get('/telemetry/:pet_id', getLatestTelemetry);
 
 export default router;
