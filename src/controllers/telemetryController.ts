@@ -24,18 +24,24 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
       );
     `).catch(() => {});
 
-    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS speed NUMERIC(5, 2) DEFAULT 0.0;`).catch(() => {});
-    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS sat_count INT DEFAULT 10;`).catch(() => {});
-    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS battery_level INT DEFAULT 100;`).catch(() => {});
-    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`).catch(() => {});
+    const alterQueries = [
+      `ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS speed NUMERIC(5, 2) DEFAULT 0.0;`,
+      `ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS sat_count INT DEFAULT 10;`,
+      `ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS battery_level INT DEFAULT 100;`,
+      `ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`
+    ];
 
-    const targetPetId = String(pet_id);
+    for (const q of alterQueries) {
+      await db.query(q).catch(() => {});
+    }
+
+    const targetPetId = String(pet_id).trim();
     const targetLat = parseFloat(String(latitude));
     const targetLng = parseFloat(String(longitude));
     const targetBattery = battery_level !== undefined ? parseInt(String(battery_level), 10) : 100;
     const targetSpeed = speed !== undefined ? parseFloat(String(speed)) : 0.0;
     const targetSat = sat_count !== undefined ? parseInt(String(sat_count), 10) : 10;
-    const targetDeviceId = device_id ? String(device_id) : targetPetId;
+    const targetDeviceId = device_id ? String(device_id).trim() : targetPetId;
 
     const result = await db.query(
       `INSERT INTO telemetry (pet_id, latitude, longitude, battery_level, speed, sat_count, device_id)
@@ -45,12 +51,17 @@ export const sendTelemetry = async (req: Request, res: Response): Promise<void> 
     );
 
     res.status(201).json({
+      status: 'SUCCESS',
       message: 'Telemetría GPS registrada con éxito en KIN-O 📡',
-      telemetry: result.rows
+      telemetry: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al guardar telemetría:', error);
-    res.status(500).json({ error: error.message || 'Error interno al guardar telemetría' });
+    res.status(200).json({
+      status: 'ERROR',
+      message: 'Detalle de base de datos en telemetría',
+      detail: error.message || String(error)
+    });
   }
 };
 
@@ -71,10 +82,10 @@ export const getLatestTelemetry = async (req: Request, res: Response): Promise<v
     }
 
     res.status(200).json({
-      latest_telemetry: result.rows
+      latest_telemetry: result.rows[0] || result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al obtener telemetría:', error);
-    res.status(500).json({ error: error.message || 'Error interno' });
+    res.status(200).json({ status: 'ERROR', detail: error.message });
   }
 };
