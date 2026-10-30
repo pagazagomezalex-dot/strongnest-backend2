@@ -3,52 +3,50 @@ import { db } from '../config/database';
 
 export const sendTelemetry = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { pet_id, latitude, longitude, battery_level, speed, sat_count } = req.body;
+    const { pet_id, latitude, longitude, battery_level, speed, sat_count, device_id } = req.body;
 
     if (!pet_id || latitude === undefined || longitude === undefined) {
       res.status(400).json({ error: 'Faltan parámetros obligatorios: pet_id, latitude, longitude' });
       return;
     }
 
-    // Verificación defensiva de la tabla
-    try {
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS telemetry (
-          telemetry_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          pet_id VARCHAR(100) NOT NULL,
-          latitude NUMERIC(10, 7) NOT NULL,
-          longitude NUMERIC(10, 7) NOT NULL,
-          battery_level INT DEFAULT 100,
-          speed NUMERIC(5, 2) DEFAULT 0.0,
-          sat_count INT DEFAULT 10,
-          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS speed NUMERIC(5, 2) DEFAULT 0.0;`);
-      await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS sat_count INT DEFAULT 10;`);
-      await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS battery_level INT DEFAULT 100;`);
-    } catch (schemaErr) {
-      console.log('Esquema telemetry verificado:', schemaErr);
-    }
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS telemetry (
+        telemetry_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        pet_id VARCHAR(100) NOT NULL,
+        latitude NUMERIC(10, 7) NOT NULL,
+        longitude NUMERIC(10, 7) NOT NULL,
+        battery_level INT DEFAULT 100,
+        speed NUMERIC(5, 2) DEFAULT 0.0,
+        sat_count INT DEFAULT 10,
+        device_id VARCHAR(100),
+        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
 
-    const query = `
-      INSERT INTO telemetry (pet_id, latitude, longitude, battery_level, speed, sat_count)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *;
-    `;
+    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS speed NUMERIC(5, 2) DEFAULT 0.0;`).catch(() => {});
+    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS sat_count INT DEFAULT 10;`).catch(() => {});
+    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS battery_level INT DEFAULT 100;`).catch(() => {});
+    await db.query(`ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS device_id VARCHAR(100);`).catch(() => {});
 
-    const result = await db.query(query, [
-      String(pet_id),
-      parseFloat(String(latitude)),
-      parseFloat(String(longitude)),
-      battery_level !== undefined ? parseInt(String(battery_level), 10) : 100,
-      speed !== undefined ? parseFloat(String(speed)) : 0.0,
-      sat_count !== undefined ? parseInt(String(sat_count), 10) : 10
-    ]);
+    const targetPetId = String(pet_id);
+    const targetLat = parseFloat(String(latitude));
+    const targetLng = parseFloat(String(longitude));
+    const targetBattery = battery_level !== undefined ? parseInt(String(battery_level), 10) : 100;
+    const targetSpeed = speed !== undefined ? parseFloat(String(speed)) : 0.0;
+    const targetSat = sat_count !== undefined ? parseInt(String(sat_count), 10) : 10;
+    const targetDeviceId = device_id ? String(device_id) : targetPetId;
+
+    const result = await db.query(
+      `INSERT INTO telemetry (pet_id, latitude, longitude, battery_level, speed, sat_count, device_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *;`,
+      [targetPetId, targetLat, targetLng, targetBattery, targetSpeed, targetSat, targetDeviceId]
+    );
 
     res.status(201).json({
       message: 'Telemetría GPS registrada con éxito en KIN-O 📡',
-      telemetry: result.rows[0] || result.rows
+      telemetry: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al guardar telemetría:', error);
@@ -73,7 +71,7 @@ export const getLatestTelemetry = async (req: Request, res: Response): Promise<v
     }
 
     res.status(200).json({
-      latest_telemetry: result.rows[0] || result.rows
+      latest_telemetry: result.rows
     });
   } catch (error: any) {
     console.error('❌ Error al obtener telemetría:', error);
