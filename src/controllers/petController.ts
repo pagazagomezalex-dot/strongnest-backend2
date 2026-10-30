@@ -10,6 +10,7 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Estructura limpia en Neon DB
     await db.query(`
       CREATE TABLE IF NOT EXISTS pets (
         pet_id VARCHAR(100) PRIMARY KEY,
@@ -21,11 +22,13 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
         device_id VARCHAR(100),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `).catch(() => {});
+
+    await db.query(`ALTER TABLE pets ALTER COLUMN owner_id DROP NOT NULL;`).catch(() => {});
 
     const targetPetId = String(pet_id).trim();
     const targetName = String(name).trim();
-    const targetOwnerId = owner_id ? String(owner_id).trim() : null;
+    const targetOwnerId = owner_id ? String(owner_id).trim() : 'NATH_OWNER_01';
     const targetSpecies = species ? String(species).trim() : 'DOG';
     const targetBreed = breed ? String(breed).trim() : 'Mestizo';
     const targetAge = age_years ? parseInt(String(age_years), 10) : 2;
@@ -49,45 +52,8 @@ export const createPet = async (req: Request, res: Response): Promise<void> => {
       pet: result.rows
     });
   } catch (error: any) {
-    try {
-      // Recreación limpia si la tabla legacy tenía conflicto de esquema
-      await db.query(`DROP TABLE IF EXISTS pets;`);
-      await db.query(`
-        CREATE TABLE pets (
-          pet_id VARCHAR(100) PRIMARY KEY,
-          owner_id VARCHAR(100),
-          name VARCHAR(100) NOT NULL,
-          species VARCHAR(50) DEFAULT 'DOG',
-          breed VARCHAR(100) DEFAULT 'Mestizo',
-          age_years INT DEFAULT 2,
-          device_id VARCHAR(100),
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      const targetPetId = String(req.body.pet_id).trim();
-      const targetName = String(req.body.name).trim();
-      const targetOwnerId = req.body.owner_id ? String(req.body.owner_id).trim() : null;
-      const targetSpecies = req.body.species ? String(req.body.species).trim() : 'DOG';
-      const targetBreed = req.body.breed ? String(req.body.breed).trim() : 'Mestizo';
-      const targetAge = req.body.age_years ? parseInt(String(req.body.age_years), 10) : 2;
-      const targetDeviceId = req.body.device_id ? String(req.body.device_id).trim() : targetPetId;
-
-      const retryResult = await db.query(
-        `INSERT INTO pets (pet_id, owner_id, name, species, breed, age_years, device_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`,
-        [targetPetId, targetOwnerId, targetName, targetSpecies, targetBreed, targetAge, targetDeviceId]
-      );
-
-      res.status(201).json({
-        status: 'SUCCESS',
-        message: 'Mascota registrada con éxito en KIN-O (Esquema actualizado) 🐾',
-        pet: retryResult.rows
-      });
-    } catch (retryErr: any) {
-      console.error('❌ Error en createPet:', retryErr);
-      res.status(500).json({ error: retryErr.message || 'Error al registrar mascota' });
-    }
+    console.error('❌ Error al crear mascota:', error);
+    res.status(500).json({ error: error.message || 'Error al registrar mascota' });
   }
 };
 
