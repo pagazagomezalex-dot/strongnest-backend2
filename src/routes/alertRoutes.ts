@@ -1,12 +1,9 @@
 import { Router } from 'express';
-import { getPetAlerts, markAlertAsRead } from '../controllers/alertController';
-import { authenticateJWT } from '../middlewares/authMiddleware';
+import { getPetAlerts, createCommunityAlert } from '../controllers/alertController';
 
 const router = Router();
 
-router.use(authenticateJWT);
-
-router.get('/:petId', getPetAlerts);
-router.patch('/:alertId/read', markAlertAsRead);
+router.get('/alerts/:pet_id', getPetAlerts);
+router.post('/alerts/community', createCommunityAlert);
 
 export default router;
