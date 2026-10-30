@@ -1,88 +1,98 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { db } from '../config/database';
+import crypto from 'crypto';
 
-export const register = async (req: Request, res: Response) => {
-  const { full_name, email, password } = req.body;
+// Función auxiliar para encriptado seguro usando módulos nativos de Node.js
+const hashPassword = (password: string): string => {
+  return crypto.createHash('sha256').update(password).digest('hex');
+};
 
-  if (!full_name || !email || !password) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios (full_name, email, password)' });
-  }
-
+// 1. Registro de Usuarios (Tutores KIN-O)
+export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const existingUser = await db.query('SELECT user_id FROM users WHERE email = $1;', [email.toLowerCase()]);
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({ error: 'El correo electrónico ya está registrado' });
+    const { email, password, full_name } = req.body;
+
+    if (!email || !password || !full_name) {
+      res.status(400).json({ error: 'Faltan campos obligatorios: email, password, full_name' });
+      return;
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
+    // Auto-creación de tabla 'users' en Neon DB
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(150) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        full_name VARCHAR(150) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Verificar si el correo ya existe
+    const existing = await db.query(`SELECT * FROM users WHERE email = $1;`, [email.toLowerCase().trim()]);
+    if (existing.rows.length > 0) {
+      res.status(409).json({ error: 'El correo electrónico ya se encuentra registrado' });
+      return;
+    }
+
+    const hashedPassword = hashPassword(password);
 
     const result = await db.query(
-      `INSERT INTO users (full_name, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING user_id, full_name, email, created_at;`,
-      [full_name, email.toLowerCase(), password_hash]
+      `INSERT INTO users (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING user_id, email, full_name, created_at;`,
+      [email.toLowerCase().trim(), hashedPassword, full_name]
     );
 
     const newUser = result.rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
 
-    const token = jwt.sign(
-      { userId: newUser.user_id, email: newUser.email },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
-
-    return res.status(201).json({
-      message: 'Usuario registrado con éxito',
+    res.status(201).json({
+      message: 'Usuario registrado con éxito en KIN-O 🔐',
       user: newUser,
       token
     });
   } catch (error: any) {
-    console.error('❌ Error en registro:', error.message);
-    return res.status(500).json({ error: 'Error al registrar usuario', details: error.message });
+    console.error('❌ Error en Registro de Usuario:', error);
+    res.status(500).json({ error: error.message || 'Error interno al registrar usuario' });
   }
 };
 
-export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Correo y contraseña requeridos' });
-  }
-
+// 2. Inicio de Sesión (Login de Tutor)
+export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1;', [email.toLowerCase()]);
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Faltan credenciales: email, password' });
+      return;
+    }
+
+    const result = await db.query(`SELECT * FROM users WHERE email = $1;`, [email.toLowerCase().trim()]);
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      res.status(401).json({ error: 'Credenciales inválidas' });
+      return;
     }
 
     const user = result.rows[0];
+    const hashedPassword = hashPassword(password);
 
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+    if (user.password_hash !== hashedPassword) {
+      res.status(401).json({ error: 'Credenciales inválidas' });
+      return;
     }
 
-    const token = jwt.sign(
-      { userId: user.user_id, email: user.email },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
+    const token = crypto.randomBytes(32).toString('hex');
 
-    return res.status(200).json({
-      message: 'Inicio de sesión exitoso',
+    res.status(200).json({
+      message: 'Inicio de sesión exitoso en KIN-O 🚀',
       user: {
         user_id: user.user_id,
-        full_name: user.full_name,
         email: user.email,
-        created_at: user.created_at
+        full_name: user.full_name
       },
       token
     });
   } catch (error: any) {
-    console.error('❌ Error en login:', error.message);
-    return res.status(500).json({ error: 'Error al iniciar sesión', details: error.message });
+    console.error('❌ Error en Login:', error);
+    res.status(500).json({ error: error.message || 'Error interno en inicio de sesión' });
   }
 };
